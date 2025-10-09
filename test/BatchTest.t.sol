@@ -4,6 +4,9 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {MockToken} from "../src/MockToken.sol";
 import {BatchSend} from "../src/BatchSend.sol";
+import {FeeOnTransferToken} from "../src/mocks/FeeOnTransferToken.sol";
+import {RevertOnZeroToken} from "../src/mocks/RevertOnZeroToken.sol";
+import {PermitMockToken} from "../src/mocks/PermitMockToken.sol";
 
 contract BatchSendTest is Test {
     MockToken public token;
@@ -134,6 +137,30 @@ contract BatchSendTest is Test {
         assertEq(total, 600);
     }
 
+    function test_BatchSend_RevertsOnRevertOnZeroToken() public {
+        // Deploy the special token
+        RevertOnZeroToken revertToken = new RevertOnZeroToken();
+        vm.deal(address(revertToken), 100 ether); // Give the token contract ether if needed
+
+        // If RevertOnZeroToken inherits from ERC20, try casting to the parent with mint
+        MockToken(address(revertToken)).mint(address(this), 100 ether);
+
+        // Prepare recipients and amounts (one of them is zero)
+        address[] memory recipients = new address[](2);
+        recipients[0] = user1;
+        recipients[1] = user2;
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 10 ether;
+        amounts[1] = 0; // This should trigger revert in the token
+
+        revertToken.approve(address(batchSend), 10 ether);
+
+        // Expect revert from BatchSend.InvalidAmount (since batchSend checks for zero amount)
+        vm.expectRevert(BatchSend.InvalidAmount.selector);
+        batchSend.batchSend(address(revertToken), recipients, amounts);
+    }
+
     /*//////////////////////////////////////////////////////////////
                         INTEGRATION TESTS
     //////////////////////////////////////////////////////////////*/
@@ -217,6 +244,37 @@ contract BatchSendTest is Test {
         token.approve(address(batchSend), 100);
 
         vm.expectRevert(BatchSend.InvalidRecipient.selector);
+        batchSend.batchSend(address(token), recipients, amounts);
+    }
+
+    function test_BatchSend_RevertsOnZeroTokenAddress() public {
+        address[] memory recipients = new address[](1);
+        recipients[0] = user1;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+
+        vm.expectRevert(BatchSend.InvalidToken.selector);
+        batchSend.batchSend(address(0), recipients, amounts);
+    }
+
+    function test_BatchSend_RevertsOnEmptyRecipients() public {
+        address[] memory recipients = new address[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.expectRevert(BatchSend.EmptyRecipients.selector);
+        batchSend.batchSend(address(token), recipients, amounts);
+    }
+
+    function test_BatchSend_RevertsOnDuplicateRecipients() public {
+        address[] memory recipients = new address[](2);
+        recipients[0] = user1;
+        recipients[1] = user1;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 1;
+        amounts[1] = 2;
+
+        token.approve(address(batchSend), 3);
+        vm.expectRevert(BatchSend.DuplicateRecipient.selector);
         batchSend.batchSend(address(token), recipients, amounts);
     }
 
@@ -305,6 +363,87 @@ contract BatchSendTest is Test {
         emit TokensSent(address(token), owner, totalAmount, 2);
 
         batchSend.batchSend(address(token), recipients, amounts);
+    }
+
+    function test_BatchSend_RevertsOnFeeOnTransferToken() public {
+        FeeOnTransferToken feeToken = new FeeOnTransferToken();
+        // Approve a total for 2 transfers
+        address[] memory recipients = new address[](2);
+        recipients[0] = user1;
+        recipients[1] = user2;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 100 ether;
+        amounts[1] = 50 ether;
+        feeToken.approve(address(batchSend), 150 ether);
+
+        vm.expectRevert(BatchSend.InexactTransfer.selector);
+        batchSend.batchSend(address(feeToken), recipients, amounts);
+    }
+
+    function test_BatchSend_StructVariant() public {
+        MockToken t = new MockToken();
+        // prepare transfers
+        BatchSend.Transfer[] memory transfers = new BatchSend.Transfer[](3);
+        transfers[0] = BatchSend.Transfer({to: user1, amount: 1 ether});
+        transfers[1] = BatchSend.Transfer({to: user2, amount: 2 ether});
+        transfers[2] = BatchSend.Transfer({to: user3, amount: 3 ether});
+
+        t.approve(address(batchSend), 6 ether);
+        uint256 ownerBefore = t.balanceOf(address(this));
+        batchSend.batchSendStruct(address(t), transfers);
+        assertEq(t.balanceOf(address(this)), ownerBefore - 6 ether);
+        assertEq(t.balanceOf(user1), 1 ether);
+        assertEq(t.balanceOf(user2), 2 ether);
+        assertEq(t.balanceOf(user3), 3 ether);
+    }
+
+    function test_BatchSend_RevertsOnTooManyRecipients() public {
+        uint256 count = 1001; // exceeds MAX_RECIPIENTS = 1000
+        address[] memory recipients = new address[](count);
+        uint256[] memory amounts = new uint256[](count);
+        for (uint256 i = 0; i < count; i++) {
+            recipients[i] = address(uint160(i + 1));
+            amounts[i] = 1;
+        }
+        token.approve(address(batchSend), count);
+        vm.expectRevert(BatchSend.TooManyRecipients.selector);
+        batchSend.batchSend(address(token), recipients, amounts);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            PERMIT TEST
+    //////////////////////////////////////////////////////////////*/
+
+    function test_BatchSendWithPermit_Success() public {
+        // Prepare a permit-enabled token and owner with private key
+        (address permitOwner, uint256 permitPriv) = makeAddrAndKey("permitOwner");
+        PermitMockToken pmt = new PermitMockToken();
+        pmt.mint(permitOwner, 1000 ether);
+
+        // Recipients
+        address[] memory recipients = new address[](2);
+        recipients[0] = user1;
+        recipients[1] = user2;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 10 ether;
+        amounts[1] = 20 ether;
+        uint256 totalAmount = 30 ether;
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = pmt.nonces(permitOwner);
+        bytes32 permitTypeHash =
+            keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+        bytes32 structHash =
+            keccak256(abi.encode(permitTypeHash, permitOwner, address(batchSend), totalAmount, nonce, deadline));
+        bytes32 domainSeparator = pmt.DOMAIN_SEPARATOR();
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(permitPriv, digest);
+
+        uint256 ownerBefore = pmt.balanceOf(permitOwner);
+        batchSend.batchSendWithPermit(address(pmt), permitOwner, recipients, amounts, totalAmount, deadline, v, r, s);
+        assertEq(pmt.balanceOf(permitOwner), ownerBefore - totalAmount);
+        assertEq(pmt.balanceOf(user1), 10 ether);
+        assertEq(pmt.balanceOf(user2), 20 ether);
     }
 
     /*//////////////////////////////////////////////////////////////

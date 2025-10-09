@@ -5,6 +5,7 @@ libs = ["lib"]
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"
 ]
-
+via_ir = true
+optimizer = true
 [rpc_endpoints]
 localhost = "http://127.0.0.1:8545"
