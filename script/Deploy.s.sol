@@ -10,13 +10,13 @@ contract DeployScript is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        // Deploy MockToken
-        MockToken token = new MockToken();
-        console.log("MockToken deployed to:", address(token));
-
         // Deploy BatchSend
         BatchSend batchSend = new BatchSend();
         console.log("BatchSend deployed to:", address(batchSend));
+
+        // Deploy MockToken
+        MockToken token = new MockToken();
+        console.log("MockToken deployed to:", address(token));
 
         vm.stopBroadcast();
 

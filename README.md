@@ -13,7 +13,7 @@ BatchSend is a simple, auditable Solidity utility for batch-sending ERC20 tokens
 
 ## Quickstart
 
-```js
+```bash
 git clone https://github.com/nwachee/test-batchsend.git
 cd test-batchsend
 forge build
@@ -36,15 +36,15 @@ forge install OpenZeppelin/openzeppelin-contracts
 
 ## Start a local node
 
-```
+```bash
 anvil
 ```
 
 # Deployment
 
-The deployment script deploys both MockToken and BatchSend and prints their addresses.
+The deployment script deploys both `MockToken` and `BatchSend` and prints their addresses.
 
-## Deployment to a testnet or mainnet
+## Local deployment
 
 #### 1. **Setup environment variables**
 
@@ -61,26 +61,35 @@ ANVIL_RPC_URL=http://localhost:8545
 
 #### 2. **Deploy**
 
-```
+```bash
 forge script script/Deploy.s.sol:DeployScript --rpc-url "$ANVIL_RPC_URL" --broadcast -vvvv
 ```
 
-After deployment, the script logs the deployed addresses for MockToken and BatchSend.
+After deployment, the script logs the deployed addresses:
+
+```
+BatchSend deployed to: 0x...
+MockToken deployed to: 0x...
+```
+
+Copy the `MockToken` address — you'll need it to interact with the frontend. Paste it into the **Token Address** field on the app.
+
+If you're using the [BatchSend frontend](https://github.com/nwachee/batchsend), also update the `31337` entry in `src/constants/index.ts` with your deployed `BatchSend` address.
 
 ## Test
 
-```
+```bash
 forge test
 ```
 
 ## Format
 
-```
+```bash
 forge fmt
 ```
 
 ## Gas snapshots (optional)
 
-```
+```bash
 forge snapshot
 ```
