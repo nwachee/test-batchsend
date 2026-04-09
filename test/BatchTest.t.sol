@@ -17,7 +17,7 @@ contract BatchSendTest is Test {
     address public user2;
     address public user3;
 
-    uint256 constant INITIAL_SUPPLY = 1_000_000 * 10 ** 18;
+    uint256 constant INITIAL_SUPPLY = 1_000 * 10 ** 18;
     uint256 constant TRANSFER_AMOUNT = 100 * 10 ** 18;
 
     event TokensSent(address indexed token, address indexed sender, uint256 totalAmount, uint256 recipientCount);
