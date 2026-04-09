@@ -53,10 +53,7 @@ contract BatchSend is ReentrancyGuard {
 
     /// @notice Batch-send tokens from msg.sender to recipients.
     /// @dev Reverts if any transfer fails or if a token is fee-on-transfer (inexact delivery).
-    function batchSend(address token, address[] calldata recipients, uint256[] calldata amounts)
-        external
-        nonReentrant
-    {
+    function batchSend(address token, address[] calldata recipients, uint256[] calldata amounts) external nonReentrant {
         if (token == address(0)) revert InvalidToken();
         uint256 len = recipients.length;
         if (len == 0) revert EmptyRecipients();
